@@ -602,8 +602,18 @@ void App::avatar_worker() {
     // and require the same Bearer auth as every other client call (see
     // Client::mxc_to_http) — going through RestClient gets that header and
     // the g_http_mutex locking for free instead of hand-rolling curl here.
-    Matrix::RestClient rest(client_.homeserver());
-    rest.set_access_token(client_.access_token());
+    //
+    // This thread is started from App::run() before login happens (so it's
+    // ready the instant the first avatar is requested), which means
+    // client_.homeserver()/access_token() are still empty at that point for
+    // a fresh login. Building RestClient here up front baked in those empty
+    // values forever (RestClient has no way to change its base URL after
+    // construction) — every avatar request silently hit "" + endpoint and
+    // failed. Deferred construction below, on the first actual job, is safe
+    // because a job can only ever be enqueued after login succeeds (avatars
+    // are only requested while rendering ROOM_LIST/CHAT, which requires a
+    // populated room list, which requires a completed post-login sync).
+    std::unique_ptr<Matrix::RestClient> rest;
 
     while (!avatar_stop_.load()) {
         std::pair<std::string, std::string> job;
@@ -638,14 +648,22 @@ void App::avatar_worker() {
         }
 
         if (raw.empty()) {
+            if (!rest) {
+                rest = std::make_unique<Matrix::RestClient>(client_.homeserver());
+            }
+            rest->set_access_token(client_.access_token());
+
             // job.second is a full mxc_to_http() URL, already rooted at our
             // own homeserver — pass just the path+query part as the endpoint.
             std::string url = job.second;
             std::string endpoint = url;
             size_t path_start = url.find("/_matrix/");
             if (path_start != std::string::npos) endpoint = url.substr(path_start);
-            raw = rest.get(endpoint, 15);
-            if (rest.last_http_code() != 200) raw.clear();
+            raw = rest->get(endpoint, 15);
+            if (rest->last_http_code() != 200) {
+                WHBLogPrintf("Avatar: GET %s failed (HTTP %ld)", endpoint.c_str(), rest->last_http_code());
+                raw.clear();
+            }
 
             if (!raw.empty()) {
                 FILE *wf = fopen(cache_path, "wb");
@@ -916,22 +934,35 @@ void App::render_header() {
         }
     }
 
+    std::string hint = "Y:Type  B:Back  ZL/ZR:Scroll";
+    int hw = draw_.text_width(hint, draw_.font_sm);
+
+    // Budget name+icon+topic to whatever's left of the hint text (with a
+    // small gap), instead of assuming a fixed width — a long room name was
+    // previously drawn unclipped and could run straight into the hint text.
     int name_x = x + 8;
+    int avail_w = CHAT_W - (name_x - x) - hw - 16;
+
     if (encrypted) {
         draw_.draw_icon(icon_lock_, name_x, (HEADER_H - ICON_MD) / 2, ICON_MD, ICON_MD, COL_TEXT);
         name_x += ICON_MD + 5;
-    }
-    draw_.draw_text(name_x, 5, name, COL_TEXT, draw_.font_bold);
-    if (!topic.empty()) {
-        std::string t = topic;
-        while (draw_.text_width(t, draw_.font_sm) > CHAT_W - 160 && t.size() > 4)
-            t.resize(t.size() - 1);
-        if (t != topic) t += "...";
-        draw_.draw_text(name_x + draw_.text_width(name, draw_.font_bold) + 6, 6, t, COL_TEXT_MUTED, draw_.font_sm);
+        avail_w -= ICON_MD + 5;
     }
 
-    std::string hint = "Y:Type  B:Back  ZL/ZR:Scroll";
-    int hw = draw_.text_width(hint, draw_.font_sm);
+    while (draw_.text_width(name, draw_.font_bold) > avail_w && name.size() > 4)
+        name.resize(name.size() - 1);
+    int name_w = draw_.text_width(name, draw_.font_bold);
+    draw_.draw_text(name_x, 5, name, COL_TEXT, draw_.font_bold);
+
+    int topic_avail_w = avail_w - name_w - 6;
+    if (!topic.empty() && topic_avail_w > 30) {
+        std::string t = topic;
+        while (draw_.text_width(t, draw_.font_sm) > topic_avail_w && t.size() > 4)
+            t.resize(t.size() - 1);
+        if (t != topic) t += "...";
+        draw_.draw_text(name_x + name_w + 6, 6, t, COL_TEXT_MUTED, draw_.font_sm);
+    }
+
     draw_.draw_text(x + CHAT_W - hw - 4, 8, hint, COL_TEXT_MUTED, draw_.font_sm);
 }
 
