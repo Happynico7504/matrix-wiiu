@@ -240,6 +240,13 @@ void Client::handle_sync_json(const std::string &raw_json) {
                                     Event tev = parse_timeline_event(room_id, es, ee);
                                     if (tev.origin_server_ts > room.last_activity_ts)
                                         room.last_activity_ts = tev.origin_server_ts;
+                                    // Cache on the room itself — this is what makes history
+                                    // from the initial /sync (before any room is selected)
+                                    // and from rooms the user isn't currently viewing survive
+                                    // until they open that room. See select_room().
+                                    room.timeline.push_back(tev);
+                                    if (room.timeline.size() > 200)
+                                        room.timeline.erase(room.timeline.begin());
                                     if (is_selected) state_.timeline.push_back(tev);
                                     new_messages.push_back(tev);
                                 }
@@ -308,7 +315,11 @@ void Client::select_room(const std::string &room_id) {
     state_.selected_room_id = room_id;
     state_.timeline.clear();
     for (auto &r : state_.rooms) {
-        if (r.id == room_id) { r.unread_count = 0; break; }
+        if (r.id == room_id) {
+            r.unread_count = 0;
+            state_.timeline = r.timeline; // restore this room's cached history
+            break;
+        }
     }
 }
 
@@ -379,6 +390,7 @@ bool Client::drain_backfill_result() {
         if (r.id == room_id) {
             r.has_more_history = !older.empty();
             if (!end_token.empty()) r.prev_batch = end_token;
+            if (!older.empty()) r.timeline.insert(r.timeline.begin(), older.begin(), older.end());
             break;
         }
     }
