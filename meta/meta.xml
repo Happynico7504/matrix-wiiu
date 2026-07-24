@@ -31,8 +31,10 @@
         - ZL/ZR: Scroll messages
 
         Setup:
-        1. Place a TTF font at SD:/wiiu/matrix_wiiu/font.ttf
-        2. Launch from the Aroma Homebrew Launcher
-        3. Enter your homeserver, username, and password on first launch
+        1. Launch from the Aroma Homebrew Launcher
+        2. Enter your homeserver, username, and password on first launch
+
+        Ships with a bundled font — no font setup required. To use a
+        different font, place one at SD:/wiiu/matrix_wiiu/font.ttf.
     </long_description>
 </app>

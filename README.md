@@ -13,6 +13,7 @@ A [Matrix](https://matrix.org/) protocol chat client for the Nintendo Wii U, run
 - Typing indicators (sent and received)
 - On-screen touch keyboard (letters, numbers, symbols)
 - Session persisted to SD card — no need to log in again on next launch
+- Ships with a bundled font (DejaVu Sans) — works out of the box, no manual font setup required
 
 ### Not yet supported
 
@@ -37,7 +38,6 @@ The full library chain pulled in transitively: `harfbuzz`, `freetype`, `libpng`,
 
 - Nintendo Wii U running [Aroma CFW](https://aroma.foryour.cafe/)
 - SD card
-- A TTF font file (see Installation)
 - USB keyboard (optional — the on-screen touch keyboard covers all input)
 - A Matrix account on any homeserver
 
@@ -63,13 +63,9 @@ docker run --rm -v "$(pwd):/project" devkitpro/devkitppc:latest bash -c \
 
 1. **Copy the app** — place `matrix-wiiu.wuhb` at `SD:/wiiu/apps/matrix-wiiu/matrix-wiiu.wuhb`
 
-2. **Font file** — place any `.ttf` font at `SD:/wiiu/matrix_wiiu/font.ttf`
+2. Launch **Matrix Wii U** from the Aroma Homebrew Launcher.
 
-   Recommended free fonts with broad Unicode coverage:
-   - [Noto Sans](https://fonts.google.com/noto/specimen/Noto+Sans)
-   - [DejaVu Sans](https://dejavu-fonts.github.io/)
-
-3. Launch **Matrix Wii U** from the Aroma Homebrew Launcher.
+The app ships with a bundled font ([DejaVu Sans](https://dejavu-fonts.github.io/), Bitstream Vera license — see [LICENSE](LICENSE)), so no font setup is needed. To use a different font instead, place a `.ttf` file at `SD:/wiiu/matrix_wiiu/font.ttf` — the app checks the SD card first and only falls back to the bundled font if that's absent.
 
 ### Logging in
 
@@ -90,7 +86,7 @@ SD:/
 │           └── matrix-wiiu.wuhb
 └── wiiu/
     └── matrix_wiiu/
-        ├── font.ttf               ← required font
+        ├── font.ttf               ← optional — overrides the bundled font if present
         ├── session.txt            ← saved login (keep private — grants account access)
         └── avatars/               ← avatar/room-icon cache (auto-created)
 ```

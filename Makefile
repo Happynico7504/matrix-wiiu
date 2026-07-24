@@ -26,6 +26,7 @@ APP_AUTHOR     := WiiU Homebrew — unofficial, not affiliated with Matrix.org
 APP_ICON       := $(TOPDIR)/meta/icon.png
 APP_TV_SPLASH  := $(TOPDIR)/meta/bootTv.png
 APP_DRC_SPLASH := $(TOPDIR)/meta/bootDrc.png
+APP_CONTENT    := $(TOPDIR)/content
 
 include $(DEVKITPRO)/wut/share/wut_rules
 
