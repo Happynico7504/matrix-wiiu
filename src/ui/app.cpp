@@ -659,11 +659,34 @@ void App::avatar_worker() {
             std::string endpoint = url;
             size_t path_start = url.find("/_matrix/");
             if (path_start != std::string::npos) endpoint = url.substr(path_start);
+
+            // The new authenticated media endpoint (MSC3916) has been seen
+            // returning HTTP 200 with a Matrix error body (M_NOT_FOUND)
+            // instead of a proper 404 for media it can't locate — observed
+            // in practice for remote/federated media the deprecated
+            // endpoint can still serve. Detect that (not just non-200) and
+            // fall back.
+            auto is_matrix_error = [](const std::string &body) {
+                return body.size() >= 2 && body[0] == '{' && body.find("\"errcode\"") != std::string::npos;
+            };
+
             raw = rest->get(endpoint, 15);
             long code = rest->last_http_code();
             WHBLogPrintf("Avatar: GET %s -> HTTP %ld, %zu bytes", endpoint.c_str(), code, raw.size());
-            if (code != 200) {
-                raw.clear();
+            bool ok = (code == 200) && !raw.empty() && !is_matrix_error(raw);
+
+            if (!ok) {
+                static const std::string kNewPrefix = "/_matrix/client/v1/media/thumbnail/";
+                size_t p = endpoint.find(kNewPrefix);
+                if (p != std::string::npos) {
+                    std::string legacy = "/_matrix/media/v3/thumbnail/" + endpoint.substr(p + kNewPrefix.size());
+                    raw = rest->get(legacy, 15);
+                    long lcode = rest->last_http_code();
+                    WHBLogPrintf("Avatar: GET %s (legacy fallback) -> HTTP %ld, %zu bytes",
+                                 legacy.c_str(), lcode, raw.size());
+                    ok = (lcode == 200) && !raw.empty() && !is_matrix_error(raw);
+                }
+                if (!ok) raw.clear();
             }
 
             if (!raw.empty()) {
