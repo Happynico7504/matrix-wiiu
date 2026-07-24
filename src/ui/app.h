@@ -37,6 +37,7 @@ private:
     // -- lifecycle --
     bool setup_sdl();
     bool load_fonts(const char *font_path);
+    void load_icons();
     void teardown();
     void wire_callbacks();
 
@@ -130,6 +131,13 @@ private:
     std::queue<std::pair<std::string, SDL_Surface*>>  avatar_done_;
     std::thread                                        avatar_thread_;
     std::atomic<bool>                                  avatar_stop_{false};
+
+    // Static UI icons — loaded once from the bundled content/icons/ directory
+    // (see load_icons()), not part of the avatar_cache_ download pipeline.
+    SDL_Texture *icon_lock_    = nullptr;
+    SDL_Texture *icon_send_    = nullptr;
+    SDL_Texture *icon_chevron_ = nullptr;
+    SDL_Texture *icon_brand_   = nullptr;
 
     Uint32 last_frame_ = 0;
 };

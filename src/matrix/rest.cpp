@@ -65,6 +65,7 @@ std::string RestClient::request(const std::string &method,
     curl_easy_setopt(curl_, CURLOPT_SSL_VERIFYHOST, 0L);
     curl_easy_setopt(curl_, CURLOPT_CONNECTTIMEOUT, 5L);
     curl_easy_setopt(curl_, CURLOPT_TIMEOUT, timeout_secs);
+    curl_easy_setopt(curl_, CURLOPT_FOLLOWLOCATION, 1L);
 
     if (method == "POST") {
         curl_easy_setopt(curl_, CURLOPT_POST, 1L);

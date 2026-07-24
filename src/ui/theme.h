@@ -22,6 +22,7 @@ constexpr SDL_Color COL_ERROR      = {255,  75,  85, 255 };  // #ff4b55
 constexpr SDL_Color COL_ENCRYPTED  = {141, 151, 165, 255 };  // lock placeholder text
 constexpr SDL_Color COL_WHITE      = {255, 255, 255, 255 };
 constexpr SDL_Color COL_TRANSPARENT= {  0,   0,   0,   0 };
+constexpr SDL_Color COL_BUBBLE     = { 43,  47,  54, 255 };  // message background, between BG_MAIN/BG_INPUT
 
 // Layout (TV: 1280x720 window, rendered at half resolution via SDL logical size)
 constexpr int SCREEN_W       = 1280;
@@ -55,5 +56,10 @@ constexpr int MSG_INDENT     = MSG_AVATAR_W + 6;
 constexpr int ROOM_ROW_H     = 28;
 constexpr int ROOM_AVATAR_W  = 20;
 constexpr int ROOM_AVATAR_H  = 20;
+constexpr int ROOM_SELECT_BAR_W = 3;   // left accent bar on the selected row
+
+// Icon sizes
+constexpr int ICON_SM        = 10;
+constexpr int ICON_MD        = 14;
 
 } // namespace UI

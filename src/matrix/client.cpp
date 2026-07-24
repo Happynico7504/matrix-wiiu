@@ -332,7 +332,12 @@ std::string Client::mxc_to_http(const std::string &mxc_uri, int w, int h) const 
     std::string media_id = rest.substr(slash + 1);
     char qs[64];
     snprintf(qs, sizeof(qs), "?width=%d&height=%d&method=crop", w, h);
-    return homeserver_ + "/_matrix/media/v3/thumbnail/" + url_encode(server) + "/" + url_encode(media_id) + qs;
+    // /_matrix/media/v3/thumbnail is deprecated (MSC3916, spec v1.11+) — the
+    // current endpoint lives under /_matrix/client/v1/ and, being a client
+    // endpoint, requires the same Authorization: Bearer token as everything
+    // else (see App::avatar_worker, which now goes through RestClient for
+    // that header instead of a bare curl handle).
+    return homeserver_ + "/_matrix/client/v1/media/thumbnail/" + url_encode(server) + "/" + url_encode(media_id) + qs;
 }
 
 // ---- async actions (action worker thread) --------------------------------------

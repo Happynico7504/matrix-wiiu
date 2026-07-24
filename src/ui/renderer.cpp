@@ -48,6 +48,14 @@ void Renderer::fill_rounded_rect(int x, int y, int w, int h, int r, SDL_Color co
     fill_circle(x + w - r,   y + h - r,   r, col);
 }
 
+void Renderer::draw_icon(SDL_Texture *tex, int x, int y, int w, int h, SDL_Color col) {
+    if (!tex) return;
+    SDL_SetTextureColorMod(tex, col.r, col.g, col.b);
+    SDL_SetTextureAlphaMod(tex, col.a);
+    SDL_Rect dst = { x, y, w, h };
+    SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+}
+
 void Renderer::fill_circle(int cx, int cy, int radius, SDL_Color col) {
     SDL_SetRenderDrawColor(renderer_, col.r, col.g, col.b, col.a);
     int r2 = radius * radius;

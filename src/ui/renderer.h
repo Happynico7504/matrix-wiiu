@@ -21,6 +21,11 @@ public:
     void fill_rounded_rect(int x, int y, int w, int h, int radius, SDL_Color col);
     void fill_circle(int cx, int cy, int radius, SDL_Color col);
 
+    // Draws a (typically monochrome-with-alpha) icon texture tinted to `col`
+    // via SDL_SetTextureColorMod/AlphaMod. Pass COL_WHITE to draw the
+    // texture's own baked colors unchanged (white is a no-op color mod).
+    void draw_icon(SDL_Texture *tex, int x, int y, int w, int h, SDL_Color col = COL_WHITE);
+
     // Text (returns rendered width)
     int  draw_text(int x, int y, const std::string &text, SDL_Color col,
                    TTF_Font *font = nullptr);

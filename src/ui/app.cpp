@@ -4,7 +4,6 @@
 #include <whb/log.h>
 #include <coreinit/time.h>
 #include <coreinit/thread.h>
-#include <curl/curl.h>
 #include <SDL2/SDL_image.h>
 #include <cstring>
 #include <cstdio>
@@ -30,13 +29,7 @@ static const char *FONT_PATHS[] = {
 static const char *SESSION_PATH = "/vol/external01/wiiu/matrix_wiiu/session.txt";
 static const char *AVATAR_CACHE_DIR = "/vol/external01/wiiu/matrix_wiiu/avatars";
 
-// ---- avatar download/decode helpers (file-scope) -----------------------------
-
-static size_t avatar_dl_write(char *ptr, size_t size, size_t nmemb, void *ud) {
-    auto *s = static_cast<std::string *>(ud);
-    s->append(ptr, size * nmemb);
-    return size * nmemb;
-}
+// ---- avatar decode helper (file-scope) ---------------------------------------
 
 // Decodes any SDL2_image-supported format (PNG/JPEG/WebP/...) to an RGBA
 // surface with a circular alpha mask applied — used for room icons and
@@ -175,6 +168,22 @@ bool App::load_fonts(const char *path) {
     return draw_.font_md != nullptr;
 }
 
+// Static UI icons bundled in content/icons/ (see gen_ui_icons.py) — loaded
+// once via IMG_LoadTexture, unlike avatars which are downloaded async.
+// Missing/failed loads are non-fatal: draw_icon() already no-ops on nullptr.
+void App::load_icons() {
+    icon_lock_    = IMG_LoadTexture(renderer_, "/vol/content/icons/lock.png");
+    icon_send_    = IMG_LoadTexture(renderer_, "/vol/content/icons/send.png");
+    icon_chevron_ = IMG_LoadTexture(renderer_, "/vol/content/icons/chevron_right.png");
+    icon_brand_   = IMG_LoadTexture(renderer_, "/vol/content/icons/brand.png");
+    if (!icon_lock_ || !icon_send_ || !icon_chevron_ || !icon_brand_) {
+        WHBLogPrintf("App: one or more UI icons failed to load: %s", IMG_GetError());
+    }
+    for (SDL_Texture *tex : { icon_lock_, icon_send_, icon_chevron_, icon_brand_ }) {
+        if (tex) SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+    }
+}
+
 void App::teardown() {
     client_.shutdown();
 
@@ -193,6 +202,11 @@ void App::teardown() {
         if (tex) SDL_DestroyTexture(tex);
     }
     avatar_cache_.clear();
+
+    for (SDL_Texture *tex : { icon_lock_, icon_send_, icon_chevron_, icon_brand_ }) {
+        if (tex) SDL_DestroyTexture(tex);
+    }
+    icon_lock_ = icon_send_ = icon_chevron_ = icon_brand_ = nullptr;
 
     draw_.destroy();
     if (renderer_) { SDL_DestroyRenderer(renderer_); renderer_ = nullptr; }
@@ -243,6 +257,7 @@ void App::run() {
     for (int i = 0; FONT_PATHS[i]; i++) {
         if (load_fonts(FONT_PATHS[i])) { fonts_ok = true; break; }
     }
+    load_icons();
 
     avatar_stop_.store(false);
     avatar_thread_ = std::thread(&App::avatar_worker, this);
@@ -583,8 +598,12 @@ void App::avatar_worker() {
     mkdir("/vol/external01/wiiu/matrix_wiiu", 0755);
     mkdir(AVATAR_CACHE_DIR, 0755);
 
-    CURL *curl = curl_easy_init();
-    if (!curl) return;
+    // Matrix media thumbnail/download endpoints live under /_matrix/client/
+    // and require the same Bearer auth as every other client call (see
+    // Client::mxc_to_http) — going through RestClient gets that header and
+    // the g_http_mutex locking for free instead of hand-rolling curl here.
+    Matrix::RestClient rest(client_.homeserver());
+    rest.set_access_token(client_.access_token());
 
     while (!avatar_stop_.load()) {
         std::pair<std::string, std::string> job;
@@ -619,19 +638,15 @@ void App::avatar_worker() {
         }
 
         if (raw.empty()) {
-            curl_easy_reset(curl);
-            curl_easy_setopt(curl, CURLOPT_URL, job.second.c_str());
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, avatar_dl_write);
-            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &raw);
-            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);
-            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
-            curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-            {
-                std::lock_guard<std::mutex> net(Matrix::g_http_mutex);
-                curl_easy_perform(curl);
-            }
+            // job.second is a full mxc_to_http() URL, already rooted at our
+            // own homeserver — pass just the path+query part as the endpoint.
+            std::string url = job.second;
+            std::string endpoint = url;
+            size_t path_start = url.find("/_matrix/");
+            if (path_start != std::string::npos) endpoint = url.substr(path_start);
+            raw = rest.get(endpoint, 15);
+            if (rest.last_http_code() != 200) raw.clear();
+
             if (!raw.empty()) {
                 FILE *wf = fopen(cache_path, "wb");
                 if (wf) { fwrite(raw.data(), 1, raw.size(), wf); fclose(wf); }
@@ -644,8 +659,6 @@ void App::avatar_worker() {
             avatar_done_.push({job.first, surf});
         }
     }
-
-    curl_easy_cleanup(curl);
 }
 
 // ---- render --------------------------------------------------------------------
@@ -694,8 +707,13 @@ void App::render_login() {
     {
         const char *title = "Sign in to Matrix";
         int tw = draw_.text_width(title, draw_.font_lg);
-        draw_.draw_text((L_W - tw) / 2, (HEADER_H - draw_.text_height(draw_.font_lg)) / 2,
-                        title, COL_TEXT, draw_.font_lg);
+        int th = draw_.text_height(draw_.font_lg);
+        int brand_sz = HEADER_H - 6;
+        int gap = 6;
+        int total_w = brand_sz + gap + tw;
+        int start_x = (L_W - total_w) / 2;
+        draw_.draw_icon(icon_brand_, start_x, (HEADER_H - brand_sz) / 2, brand_sz, brand_sz);
+        draw_.draw_text(start_x + brand_sz + gap, (HEADER_H - th) / 2, title, COL_TEXT, draw_.font_lg);
     }
     draw_.fill_rect(0, HEADER_H - 1, L_W, 1, COL_BG_DARK);
 
@@ -803,7 +821,10 @@ std::string App::sender_display_name(const Matrix::Room *room, const std::string
 }
 
 void App::draw_room_item(int x, int y, int w, const Matrix::Room &r, bool selected) {
-    if (selected) draw_.fill_rect(x, y, w, ROOM_ROW_H, COL_BG_SELECT);
+    if (selected) {
+        draw_.fill_rect(x, y, w, ROOM_ROW_H, COL_BG_SELECT);
+        draw_.fill_rect(x, y, ROOM_SELECT_BAR_W, ROOM_ROW_H, COL_ACCENT);
+    }
 
     int cx = x + 6 + ROOM_AVATAR_W / 2, cy = y + ROOM_ROW_H / 2;
     auto it = avatar_cache_.find("room:" + r.id);
@@ -822,13 +843,20 @@ void App::draw_room_item(int x, int y, int w, const Matrix::Room &r, bool select
             request_avatar("room:" + r.id, r.avatar_mxc);
     }
 
+    SDL_Color text_col = selected ? COL_TEXT : COL_TEXT_MUTED;
     int text_x = x + 6 + ROOM_AVATAR_W + 6;
-    std::string name = (r.encrypted ? "[E] " : "") + r.name;
+
+    if (r.encrypted) {
+        draw_.draw_icon(icon_lock_, text_x, y + (ROOM_ROW_H - ICON_SM) / 2, ICON_SM, ICON_SM, text_col);
+        text_x += ICON_SM + 4;
+    }
+
+    std::string name = r.name;
     int max_w = w - (text_x - x) - 20;
     while (draw_.text_width(name, draw_.font_sm) > max_w && name.size() > 3)
         name.resize(name.size() - 1);
     draw_.draw_text(text_x, y + (ROOM_ROW_H - draw_.text_height(draw_.font_sm)) / 2,
-                    name, selected ? COL_TEXT : COL_TEXT_MUTED, draw_.font_sm);
+                    name, text_col, draw_.font_sm);
 
     if (r.unread_count > 0) {
         std::string badge = r.unread_count > 99 ? "99+" : std::to_string(r.unread_count);
@@ -836,6 +864,9 @@ void App::draw_room_item(int x, int y, int w, const Matrix::Room &r, bool select
         int bx = x + w - bw - 4, by = y + 4;
         draw_.fill_rounded_rect(bx, by, bw, 14, 7, COL_ACCENT);
         draw_.draw_text(bx + 4, by + 1, badge, COL_WHITE, draw_.font_sm);
+    } else {
+        draw_.draw_icon(icon_chevron_, x + w - ICON_SM - 6, y + (ROOM_ROW_H - ICON_SM) / 2,
+                        ICON_SM, ICON_SM, COL_TEXT_MUTED);
     }
 }
 
@@ -875,21 +906,28 @@ void App::render_header() {
     const std::string &sel = client_.state().selected_room_id;
     std::string name = "Select a room";
     std::string topic;
+    bool encrypted = false;
     for (auto &r : rooms) {
         if (r.id == sel) {
-            name = (r.encrypted ? "[E] " : "") + r.name;
+            name = r.name;
             topic = r.topic;
+            encrypted = r.encrypted;
             break;
         }
     }
 
-    draw_.draw_text(x + 8, 5, name, COL_TEXT, draw_.font_bold);
+    int name_x = x + 8;
+    if (encrypted) {
+        draw_.draw_icon(icon_lock_, name_x, (HEADER_H - ICON_MD) / 2, ICON_MD, ICON_MD, COL_TEXT);
+        name_x += ICON_MD + 5;
+    }
+    draw_.draw_text(name_x, 5, name, COL_TEXT, draw_.font_bold);
     if (!topic.empty()) {
         std::string t = topic;
         while (draw_.text_width(t, draw_.font_sm) > CHAT_W - 160 && t.size() > 4)
             t.resize(t.size() - 1);
         if (t != topic) t += "...";
-        draw_.draw_text(x + 8 + draw_.text_width(name, draw_.font_bold) + 6, 6, t, COL_TEXT_MUTED, draw_.font_sm);
+        draw_.draw_text(name_x + draw_.text_width(name, draw_.font_bold) + 6, 6, t, COL_TEXT_MUTED, draw_.font_sm);
     }
 
     std::string hint = "Y:Type  B:Back  ZL/ZR:Scroll";
@@ -958,9 +996,24 @@ void App::draw_message(int x, int &y, const Matrix::Event &ev, bool group) {
     SDL_Color body_col = (ev.msgtype == "m.room.encrypted") ? COL_ENCRYPTED : COL_TEXT;
     if (!body.empty()) {
         auto lines = draw_.wrap_text(body, avail_w, draw_.font_md);
+        int line_h = draw_.text_height(draw_.font_md) + 1;
+
+        // Subtle bubble behind the text block, sized to the widest wrapped
+        // line rather than the full chat width — keeps the existing
+        // avatar-left / flat-text layout, just visually separates messages.
+        // Bounds exactly match the text block's own footprint below (no
+        // padding overshoot) so this can't drift from render_chat's
+        // separately-computed per-message height used for scroll layout.
+        int max_lw = 0;
+        for (auto &line : lines) max_lw = std::max(max_lw, draw_.text_width(line, draw_.font_md));
+        int bubble_x = x + MSG_PADDING + MSG_INDENT - 6;
+        int bubble_w = max_lw + 12;
+        int bubble_h = (int)lines.size() * line_h;
+        draw_.fill_rounded_rect(bubble_x, y, bubble_w, bubble_h, 6, COL_BUBBLE);
+
         for (auto &line : lines) {
             draw_.draw_text(x + MSG_PADDING + MSG_INDENT, y, line, body_col, draw_.font_md);
-            y += draw_.text_height(draw_.font_md) + 1;
+            y += line_h;
         }
     }
 }
@@ -1144,10 +1197,15 @@ void App::render_keyboard() {
     kx += KB_SP_W + KB_KEY_GAP;
 
     {
-        const char *lbl = typing_login_ ? "DONE" : "SEND";
         draw_.fill_rounded_rect(kx, ky, KB_SP_W, KB_KEY_H, 3, COL_ACCENT);
-        int tw = draw_.text_width(lbl, draw_.font_sm), th = draw_.text_height(draw_.font_sm);
-        draw_.draw_text(kx + (KB_SP_W - tw) / 2, ky + (KB_KEY_H - th) / 2, lbl, COL_WHITE, draw_.font_sm);
+        if (typing_login_) {
+            const char *lbl = "DONE";
+            int tw = draw_.text_width(lbl, draw_.font_sm), th = draw_.text_height(draw_.font_sm);
+            draw_.draw_text(kx + (KB_SP_W - tw) / 2, ky + (KB_KEY_H - th) / 2, lbl, COL_WHITE, draw_.font_sm);
+        } else {
+            int isz = ICON_MD;
+            draw_.draw_icon(icon_send_, kx + (KB_SP_W - isz) / 2, ky + (KB_KEY_H - isz) / 2, isz, isz, COL_WHITE);
+        }
     }
 }
 
