@@ -53,13 +53,21 @@ bool SyncWorker::drain_result(std::string &raw_json) {
 
 void SyncWorker::loop(EventQueue *queue) {
     while (!stop_.load()) {
-        std::string endpoint = "/_matrix/client/v3/sync?timeout=12000&filter=" + std::string(FILTER_QS);
+        std::string endpoint = "/_matrix/client/v3/sync?timeout=3000&filter=" + std::string(FILTER_QS);
         if (!since_.empty()) {
             endpoint += "&since=" + url_encode(since_);
         }
 
-        // Server-side timeout is 12s; give the transfer a comfortable margin.
-        std::string body = rest_.get(endpoint, 20);
+        // g_http_mutex (see net_mutex.h) is held for this call's full
+        // duration, including the server-side long-poll wait — with a 12s
+        // timeout this starved avatar downloads and sends of any chance to
+        // grab the mutex for most of every cycle (observed as very slow
+        // avatar loading in practice). A shorter long-poll means more
+        // frequent /sync round-trips but far more frequent windows for
+        // other requests to run; the Wii U isn't battery-constrained like a
+        // phone, so the extra chattiness is a fine tradeoff for
+        // responsiveness.
+        std::string body = rest_.get(endpoint, 8);
         long code = rest_.last_http_code();
 
         if (stop_.load()) break;

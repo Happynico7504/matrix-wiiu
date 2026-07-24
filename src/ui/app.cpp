@@ -676,7 +676,7 @@ void App::avatar_worker() {
             size_t path_start = url.find("/_matrix/");
             if (path_start != std::string::npos) endpoint = url.substr(path_start);
 
-            raw = rest->get(endpoint, 15);
+            raw = rest->get(endpoint, 8);
             long code = rest->last_http_code();
             WHBLogPrintf("Avatar: GET %s -> HTTP %ld, %zu bytes", endpoint.c_str(), code, raw.size());
             bool ok = (code == 200) && !raw.empty() && !is_matrix_error(raw);
@@ -686,7 +686,7 @@ void App::avatar_worker() {
                 size_t p = endpoint.find(kNewPrefix);
                 if (p != std::string::npos) {
                     std::string legacy = "/_matrix/media/v3/thumbnail/" + endpoint.substr(p + kNewPrefix.size());
-                    raw = rest->get(legacy, 15);
+                    raw = rest->get(legacy, 8);
                     long lcode = rest->last_http_code();
                     WHBLogPrintf("Avatar: GET %s (legacy fallback) -> HTTP %ld, %zu bytes",
                                  legacy.c_str(), lcode, raw.size());
