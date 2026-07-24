@@ -1,0 +1,18 @@
+# Build output
+build/
+*.elf
+*.rpx
+*.wuhb
+*.map
+
+# SD card session file — never commit credentials
+wiiu/matrix_wiiu_session.txt
+
+# Editor / OS
+.DS_Store
+.vscode/
+*.swp
+*.swo
+
+# Claude Code session data
+.claude/

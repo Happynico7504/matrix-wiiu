@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<app version="1">
+    <name>Matrix Wii U (Unofficial)</name>
+    <coder>Nico Christmann</coder>
+    <version>0.1.0</version>
+    <release_date>20260724000000</release_date>
+    <short_description>Unofficial Matrix client for Nintendo Wii U</short_description>
+    <long_description>
+        An unofficial, fan-made Matrix protocol chat client for the Nintendo
+        Wii U (Aroma homebrew). Not affiliated with, endorsed by, or
+        supported by the Matrix.org Foundation or New Vector Ltd.
+
+        Features:
+        - Real-time messaging via Matrix /sync long-polling
+        - Room list with names, topics, and avatars
+        - Message history with senders, timestamps, and scroll
+        - Typing indicators
+        - On-screen touch keyboard (letters, numbers, symbols)
+        - User-configurable homeserver (works with matrix.org or self-hosted servers)
+
+        Not yet supported:
+        - Encrypted rooms (shown but not decrypted)
+        - Room invites / joining new rooms
+
+        Controls:
+        - D-Pad Up/Down: Navigate / scroll
+        - D-Pad Left/Right: Switch panels
+        - A: Select room
+        - B: Go back
+        - Y: Open message input
+        - ZL/ZR: Scroll messages
+
+        Setup:
+        1. Place a TTF font at SD:/wiiu/matrix_wiiu/font.ttf
+        2. Launch from the Aroma Homebrew Launcher
+        3. Enter your homeserver, username, and password on first launch
+    </long_description>
+</app>
