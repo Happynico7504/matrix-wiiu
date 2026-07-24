@@ -17,11 +17,14 @@ using namespace Matrix;
 
 namespace UI {
 
-// Font / session search paths (SD card then romfs)
+// Font search paths: SD card first, then the font bundled into the WUHB's
+// content/ directory. WUT mounts a running app's content path at
+// /vol/content/ — "romfs:/" is the 3DS/libctru convention and doesn't exist
+// under WUT, so that path was silently never matching.
 static const char *FONT_PATHS[] = {
     "/vol/external01/wiiu/matrix_wiiu/font.ttf",
     "/vol/external01/wiiu/font.ttf",
-    "romfs:/font.ttf",
+    "/vol/content/font.ttf",
     nullptr
 };
 static const char *SESSION_PATH = "/vol/external01/wiiu/matrix_wiiu/session.txt";
