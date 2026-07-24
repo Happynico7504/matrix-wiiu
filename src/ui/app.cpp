@@ -637,6 +637,17 @@ void App::avatar_worker() {
         snprintf(cache_path, sizeof(cache_path), "%s/%s.img", AVATAR_CACHE_DIR, job.first.c_str());
         for (char *p = cache_path; *p; p++) if (*p == ':') *p = '_';
 
+        // The new authenticated media endpoint (MSC3916) has been seen
+        // returning HTTP 200 with a Matrix error body (M_NOT_FOUND) instead
+        // of a proper 404 for media it can't locate. An earlier version of
+        // this code treated any 200 as success and cached that error body
+        // to disk, so this also has to be checked on cache *reads* — not
+        // just fresh downloads — or a stale bad cache file would keep
+        // "succeeding" from disk forever and never reach the fallback below.
+        auto is_matrix_error = [](const std::string &body) {
+            return body.size() >= 2 && body[0] == '{' && body.find("\"errcode\"") != std::string::npos;
+        };
+
         std::string raw;
         FILE *f = fopen(cache_path, "rb");
         if (f) {
@@ -645,6 +656,11 @@ void App::avatar_worker() {
             rewind(f);
             if (sz > 0) { raw.resize((size_t)sz); fread(&raw[0], 1, (size_t)sz, f); }
             fclose(f);
+            if (is_matrix_error(raw)) {
+                WHBLogPrintf("Avatar: %s discarding stale error cache", job.first.c_str());
+                raw.clear();
+                remove(cache_path);
+            }
         }
 
         if (raw.empty()) {
@@ -659,16 +675,6 @@ void App::avatar_worker() {
             std::string endpoint = url;
             size_t path_start = url.find("/_matrix/");
             if (path_start != std::string::npos) endpoint = url.substr(path_start);
-
-            // The new authenticated media endpoint (MSC3916) has been seen
-            // returning HTTP 200 with a Matrix error body (M_NOT_FOUND)
-            // instead of a proper 404 for media it can't locate — observed
-            // in practice for remote/federated media the deprecated
-            // endpoint can still serve. Detect that (not just non-200) and
-            // fall back.
-            auto is_matrix_error = [](const std::string &body) {
-                return body.size() >= 2 && body[0] == '{' && body.find("\"errcode\"") != std::string::npos;
-            };
 
             raw = rest->get(endpoint, 15);
             long code = rest->last_http_code();
