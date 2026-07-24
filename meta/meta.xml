@@ -2,8 +2,8 @@
 <app version="1">
     <name>Matrix Wii U (Unofficial)</name>
     <coder>Nico Christmann</coder>
-    <version>0.1.0</version>
-    <release_date>20260724000000</release_date>
+    <version>1.0.0</version>
+    <release_date>20260724170000</release_date>
     <short_description>Unofficial Matrix client for Nintendo Wii U</short_description>
     <long_description>
         An unofficial, fan-made Matrix protocol chat client for the Nintendo

@@ -42,7 +42,7 @@ static int run_app() {
 int main(int argc, char **argv) {
     WHBProcInit();
     WHBLogUdpInit();
-    WHBLogPrint("Matrix Wii U v0.1.0 starting");
+    WHBLogPrint("Matrix Wii U v1.0.0 starting");
 
     // Network
     ACInitialize();

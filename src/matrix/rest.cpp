@@ -55,7 +55,7 @@ std::string RestClient::request(const std::string &method,
         headers = curl_slist_append(headers, auth_header.c_str());
     }
     headers = curl_slist_append(headers, content_type.c_str());
-    headers = curl_slist_append(headers, "User-Agent: matrix-wiiu/0.1.0");
+    headers = curl_slist_append(headers, "User-Agent: matrix-wiiu/1.0.0");
 
     curl_easy_setopt(curl_, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl_, CURLOPT_HTTPHEADER, headers);
