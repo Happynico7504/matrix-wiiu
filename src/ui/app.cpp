@@ -660,9 +660,16 @@ void App::avatar_worker() {
             size_t path_start = url.find("/_matrix/");
             if (path_start != std::string::npos) endpoint = url.substr(path_start);
             raw = rest->get(endpoint, 15);
-            if (rest->last_http_code() != 200) {
-                WHBLogPrintf("Avatar: GET %s failed (HTTP %ld)", endpoint.c_str(), rest->last_http_code());
+            long code = rest->last_http_code();
+            if (code != 200) {
+                WHBLogPrintf("Avatar: GET %s failed (HTTP %ld)", endpoint.c_str(), code);
                 raw.clear();
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(avatar_mutex_);
+                avatar_debug_ = job.first + " -> HTTP " + std::to_string(code)
+                              + " (" + std::to_string(raw.size()) + "B) " + endpoint;
             }
 
             if (!raw.empty()) {
@@ -672,6 +679,11 @@ void App::avatar_worker() {
         }
 
         SDL_Surface *surf = raw.empty() ? nullptr : decode_avatar(raw.data(), raw.size());
+        if (!raw.empty() && !surf) {
+            std::lock_guard<std::mutex> lock(avatar_mutex_);
+            avatar_debug_ = job.first + " -> downloaded " + std::to_string(raw.size())
+                          + "B but decode_avatar() failed";
+        }
         {
             std::lock_guard<std::mutex> lock(avatar_mutex_);
             avatar_done_.push({job.first, surf});
@@ -711,6 +723,25 @@ void App::render() {
             render_chat();
             render_input_box();
             break;
+    }
+
+    // TEMPORARY: on-screen avatar-fetch diagnostic (see avatar_debug_ in
+    // app.h) — shows the last avatar HTTP attempt's outcome directly on
+    // screen since neither Cemu nor real hardware surface WHBLogPrintf
+    // without a separate UDP log listener. Remove once avatars are
+    // confirmed working.
+    {
+        std::string dbg;
+        {
+            std::lock_guard<std::mutex> lock(avatar_mutex_);
+            dbg = avatar_debug_;
+        }
+        if (!dbg.empty()) {
+            while (draw_.text_width(dbg, draw_.font_sm) > L_W - 8 && dbg.size() > 4)
+                dbg.resize(dbg.size() - 1);
+            draw_.fill_rect(0, L_H - 11, L_W, 11, { 0, 0, 0, 255 });
+            draw_.draw_text(4, L_H - 10, dbg, COL_MENTION, draw_.font_sm);
+        }
     }
 
     SDL_RenderPresent(renderer_);

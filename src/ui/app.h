@@ -131,6 +131,11 @@ private:
     std::queue<std::pair<std::string, SDL_Surface*>>  avatar_done_;
     std::thread                                        avatar_thread_;
     std::atomic<bool>                                  avatar_stop_{false};
+    // TEMPORARY diagnostic: last avatar fetch attempt's outcome, shown
+    // on-screen (render_room_list) since Cemu doesn't surface WHBLogPrintf
+    // without a separate UDP log listener. Remove once avatars are confirmed
+    // working. Guarded by avatar_mutex_.
+    std::string avatar_debug_;
 
     // Static UI icons — loaded once from the bundled content/icons/ directory
     // (see load_icons()), not part of the avatar_cache_ download pipeline.
